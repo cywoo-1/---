@@ -1,0 +1,166 @@
+import unittest
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import jieba
+import re
+import numpy as np
+import cProfile
+import sys
+
+
+
+# 文本清理
+def clean_txt(text):
+    stopwords_path=r'D:\pythonpro\软件工程-第一次个人项目\stopwords.txt'
+    with open(stopwords_path,'r',encoding='utf-8')as f:
+        stopwords=[line.strip()for line in f.readlines()]
+    #进行分词
+    words = jieba.cut(text)
+    clean_words = [word for word in words if word not in stopwords]
+    if not clean_words:
+        print(f"警告：文档经过清洗后为空。原始文档为：{text}")
+    return clean_words
+
+
+def extract_keywords_tfidf(documents, top_n=20):
+    # 将过滤后的文档集转化为文本列表
+    documents_text = [' '.join(document) for document in documents]
+
+    # 创建TF-IDF向量化器
+    tfidf_vectorizer = TfidfVectorizer()
+
+    # 计算TF-IDF权重
+    tfidf_matrix = tfidf_vectorizer.fit_transform(documents_text)
+
+    # 计算每个文档中的关键词
+    top_keywords_indices_per_document=[]
+
+    document_tfidf_weights = tfidf_matrix[0].toarray()[0]
+
+    # 前top_n个关键词在features中的索引,将第一个文档的关键词取出作为对照的标准
+    top_keyword_indices_num = np.argsort(document_tfidf_weights)[::-1][:top_n]
+
+    top_keyword_indices = document_tfidf_weights[top_keyword_indices_num]
+
+    top_keywords_indices_per_document.append(top_keyword_indices)
+    for doc_id in range(1,len(documents)):
+        document_tfidf_weights = tfidf_matrix[doc_id].toarray()[0]
+
+        top_keyword_indices=document_tfidf_weights[top_keyword_indices_num]
+
+        top_keywords_indices_per_document.append(top_keyword_indices)
+
+    # return top_keywords_per_document
+    if not top_keywords_indices_per_document:
+        print(f"警告：读取的文档为空。")
+    return top_keywords_indices_per_document
+
+
+def get_paths_from_args():
+    if len(sys.argv)!= 4:
+        raise ValueError("Not enough command line arguments provided.")
+    return sys.argv[1], sys.argv[2], sys.argv[3]
+
+# 加载文章
+# def loadfile(original_path, plagiarized_path):
+#     merged_cleaned = []
+#     dataset_1 = []
+#     try:
+#         with open(original_path, 'r', encoding='utf-8') as original_file:
+#             original_content = original_file.read()
+#             dataset_1.append(original_content)
+#         with open(plagiarized_path, 'r', encoding='utf-8') as plagiarized_file:
+#             plagiarized_content = plagiarized_file.read()
+#             dataset_1.append(plagiarized_content)
+#     except Exception as e:
+#         print(f"发生错误: {e}")
+#         print(len(dataset_1))
+#     for filename in dataset_1:
+#         # 除去\n和空格
+#         cleaned_text = re.sub(r"\n", "", filename)
+#         cleaned_text_spaces = re.sub(r'\s+', '', cleaned_text).strip()
+#         # 进行文本清理
+#         cleaned_1 = clean_txt(cleaned_text_spaces)
+#         # 将各个文章中的 word_list 进行合并
+#         merged_cleaned.append(cleaned_1)
+#     return merged_cleaned
+
+
+def loadfile():
+    merged_cleaned = []
+    try:
+        # 读取原始文件内容并进行处理
+        with open(original_path, 'r', encoding='utf-8') as original_file:
+            original_content = original_file.read()
+            cleaned_original = clean_txt(re.sub(r'\n|\s+', '', original_content).strip())
+            merged_cleaned.append(cleaned_original)
+        # 读取疑似抄袭文件内容并进行处理
+        with open(plagiarized_path, 'r', encoding='utf-8') as plagiarized_file:
+            plagiarized_content = plagiarized_file.read()
+            cleaned_plagiarized = clean_txt(re.sub(r'\n|\s+', '', plagiarized_content).strip())
+            merged_cleaned.append(cleaned_plagiarized)
+    except Exception as e:
+        print(f"发生错误: {e}")
+    return merged_cleaned
+
+
+# 正式程序  需要将代码做以下修改  def loadfile():
+# 获取命令行参数
+original_path = sys.argv[1]
+plagiarized_path = sys.argv[2]
+output_path = sys.argv[3]
+# 读入并清洗文档
+cleaned=loadfile()
+# 用tf-idf计算文档中字词的权重
+top_matrix=extract_keywords_tfidf(cleaned)
+# 将top——keywords从稀疏矩阵转换为普通数组
+cosine_sims=cosine_similarity(top_matrix)
+sim_between_doc=cosine_sims[0][1]
+with open(output_path, 'w', encoding='utf-8') as output_file:
+    output_file.write(f"两个文档的相似度:{ sim_between_doc }\n")
+
+
+#进行程序性能测试
+cProfile.run('extract_keywords_tfidf(cleaned, top_n=20)')
+cProfile.run('loadfile()')
+
+# # 测试文件  需要将代码做以下修改 def loadfile(original_path, plagiarized_path):
+# class TestProgram(unittest.TestCase):
+#
+#     def setUp(self):
+#         self.simulated_documents = [
+#             ['apple', 'banana', 'orange'],
+#             ['banana', 'grape', 'pear'],
+#             ['orange', 'peach', 'kiwi']
+#         ]
+#
+#     def test_clean_txt(self):
+#         # 调用导入模块中的 clean_txt 函数
+#         text = "这是一个测试文本，包含一些常见的词汇。"
+#         expected_result = ['这是', '测试', '文本', '包含', '常见', '词汇']
+#         result = clean_txt(text)
+#         self.assertEqual(result, expected_result)
+#
+#     def test_clean_txt_1(self):
+#         # 调用导入模块中的 clean_txt 函数
+#         text = ""
+#         expected_result = []
+#         result = clean_txt(text)
+#         self.assertEqual(result, expected_result)
+#
+#     def test_extract_keywords_tfidf(self):
+#         result = extract_keywords_tfidf(self.simulated_documents, top_n=2)
+#         first_doc_keywords = result[0]
+#         expected_first_doc_keywords = [0.68091856,0.51785612]
+#         print(f"实际关键词权重：{first_doc_keywords}")
+#         print(f"预期关键词权重：{expected_first_doc_keywords}")
+#         self.assertTrue(np.allclose(first_doc_keywords, expected_first_doc_keywords))
+#
+#     def test_loadfile(self):
+#         merged_cleaned = loadfile('orig.txt', 'orig_0.8_add.txt')
+#         # 检查返回结果是否符合预期
+#         self.assertIsInstance(merged_cleaned, list)
+#
+# if __name__ == '__main__':
+#     unittest.main()
+
